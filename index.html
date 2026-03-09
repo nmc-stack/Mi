@@ -1,0 +1,214 @@
+html
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小學運動會 - 跳遠比賽紀錄平台 (班別版)</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #e67e22;
+            --success-color: #27ae60;
+            --bg-color: #f0f3f6;
+        }
+        body { font-family: "Microsoft JhengHei", sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; }
+        .container { max-width: 1100px; margin: auto; display: grid; grid-template-columns: 350px 1fr; gap: 20px; }
+        @media (max-width: 850px) { .container { grid-template-columns: 1fr; } }
+        
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: var(--primary-color); margin-bottom: 30px; }
+        h2 { color: var(--primary-color); border-left: 5px solid var(--accent-color); padding-left: 10px; margin-top: 0; }
+        
+        .input-section { display: flex; flex-direction: column; gap: 12px; }
+        .input-group { display: flex; flex-direction: column; }
+        label { margin-bottom: 5px; font-weight: bold; color: #555; font-size: 14px; }
+        input { padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 16px; }
+        input:focus { border-color: var(--success-color); outline: none; background-color: #fffdf0; }
+        
+        button { padding: 12px; background-color: var(--success-color); color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; transition: 0.3s; font-weight: bold; }
+        button:hover { background-color: #219150; transform: translateY(-2px); }
+        button.clear-btn { background-color: #95a5a6; margin-top: 20px; font-size: 14px; width: 100%; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { border-bottom: 1px solid #eee; padding: 12px; text-align: center; }
+        th { background-color: var(--primary-color); color: white; }
+        
+        /* 排名榜樣式 */
+        .rank-row { transition: 0.2s; }
+        .rank-row:hover { background-color: #f9f9f9; }
+        .rank-1 { background-color: #fff9e6; font-weight: bold; border: 2px solid #ffd700; }
+        .rank-number { font-weight: bold; color: var(--accent-color); font-size: 1.2em; }
+        .score-highlight { color: #e74c3c; font-weight: bold; font-size: 1.1em; }
+        
+        .delete-btn { color: #e74c3c; cursor: pointer; text-decoration: underline; font-size: 12px; }
+        .history-container { max-height: 400px; overflow-y: auto; margin-top: 20px; border: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+<h1>🏆 小學運動會跳遠比賽紀錄平台</h1>
+
+<div class="container">
+    <!-- 左側：輸入介面 -->
+    <div class="card">
+        <h2>數據輸入</h2>
+        <div class="input-section">
+            <div class="input-group">
+                <label>班別 (如: 4A, 6C)</label>
+                <input type="text" id="studentClass" placeholder="輸入班別" autocomplete="off">
+            </div>
+            <div class="input-group">
+                <label>學生姓名</label>
+                <input type="text" id="studentName" placeholder="輸入姓名" autocomplete="off">
+            </div>
+            <div class="input-group">
+                <label>成績 (米)</label>
+                <input type="number" id="score" step="0.01" placeholder="0.00" onkeydown="if(event.key==='Enter') addData()">
+            </div>
+            <button onclick="addData()">確認並加入排名</button>
+        </div>
+        
+        <div class="history-container">
+            <table id="historyTable">
+                <thead>
+                    <tr><th>班別</th><th>姓名</th><th>成績</th><th></th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <button class="clear-btn" onclick="clearAll()">清空全場數據</button>
+    </div>
+
+    <!-- 右側：前 8 名排名榜 -->
+    <div class="card">
+        <h2>🏅 總排名：前 8 名英雄榜</h2>
+        <p style="color: #7f8c8d; font-size: 14px;">( 系統規則：僅顯示超過 1.2 米之最佳成績 )</p>
+        <table>
+            <thead>
+                <tr>
+                    <th width="15%">名次</th>
+                    <th width="20%">班別</th>
+                    <th width="35%">姓名</th>
+                    <th width="30%">成績 (米)</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard">
+                <!-- 排名資料 -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let records = [];
+
+    // 頁面載入時讀取舊數據
+    window.onload = function() {
+        const saved = localStorage.getItem('longJumpData_v2');
+        if (saved) {
+            records = JSON.parse(saved);
+            updateUI();
+        }
+    }
+
+    function addData() {
+        const classInput = document.getElementById('studentClass');
+        const nameInput = document.getElementById('studentName');
+        const scoreInput = document.getElementById('score');
+        
+        const sClass = classInput.value.trim();
+        const sName = nameInput.value.trim();
+        const sScore = parseFloat(scoreInput.value);
+
+        if (!sClass || !sName || isNaN(sScore)) {
+            alert("請填寫完整的班別、姓名及成績！");
+            return;
+        }
+
+        // 加入紀錄
+        records.push({ 
+            id: Date.now(), 
+            className: sClass, 
+            name: sName, 
+            score: sScore 
+        });
+        
+        saveData();
+        
+        // 清空輸入並聚焦回班別欄位方便下一次輸入
+        nameInput.value = '';
+        scoreInput.value = '';
+        classInput.focus();
+        classInput.select();
+
+        updateUI();
+    }
+
+    function deleteData(id) {
+        if(confirm("確定刪除這筆紀錄嗎？")) {
+            records = records.filter(r => r.id !== id);
+            saveData();
+            updateUI();
+        }
+    }
+
+    function clearAll() {
+        if(confirm("警告：這將刪除所有已輸入的比賽數據！確定嗎？")) {
+            records = [];
+            saveData();
+            updateUI();
+        }
+    }
+
+    function saveData() {
+        localStorage.setItem('longJumpData_v2', JSON.stringify(records));
+    }
+
+    function updateUI() {
+        // 1. 更新左側歷史清單
+        const historyBody = document.querySelector('#historyTable tbody');
+        historyBody.innerHTML = '';
+        [...records].reverse().forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${r.className}</td>
+                <td>${r.name}</td>
+                <td>${r.score}m</td>
+                <td><span class="delete-btn" onclick="deleteData(${r.id})">刪</span></td>
+            `;
+            historyBody.appendChild(tr);
+        });
+
+        // 2. 更新右側排名榜 (大於 1.2 米)
+        const leaderboardBody = document.getElementById('leaderboard');
+        leaderboardBody.innerHTML = '';
+
+        const rankedData = records
+            .filter(r => r.score > 1.2)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 8);
+
+        for (let i = 0; i < 8; i++) {
+            const tr = document.createElement('tr');
+            tr.className = 'rank-row';
+            
+            if (i < rankedData.length) {
+                const data = rankedData[i];
+                if (i === 0) tr.className += ' rank-1';
+                tr.innerHTML = `
+                    <td class="rank-number">${i + 1}</td>
+                    <td>${data.className}</td>
+                    <td>${data.name}</td>
+                    <td class="score-highlight">${data.score.toFixed(2)} m</td>
+                `;
+            } else {
+                tr.innerHTML = `<td>${i + 1}</td><td>-</td><td>-</td><td>-</td>`;
+            }
+            leaderboardBody.appendChild(tr);
+        }
+    }
+</script>
+
+</body>
+</html>
